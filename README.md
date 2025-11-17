@@ -5,18 +5,24 @@ CINEMAT là hệ thống website cho phép người dùng khám phá phim, xem t
  Hệ thống cung cấp giao diện dành cho Admin nhằm quản lý phim, người dùng, đánh giá, bình luận và xử lý yêu cầu thêm phim.
 
 📌 2. TỔNG QUAN
+
 🎯 2.1. Mục đích
+
 Xây dựng hệ thống đặt vé tàu cho người dùng: tìm kiếm chuyến, đặt vé, thanh toán, xem lịch sử vé
 Hỗ trợ admin quản lý toàn bộ dữ liệu: tàu, toa, ghế, ga, lịch trình, bảng giá, vé và yêu cầu trả vé
 Nâng cao kỹ năng lập trình, thiết kế CSDL, bảo mật & tối ưu hệ thống
+
 🛠 2.2. Công nghệ sử dụng
+
 Backend: PHP
 Frontend: HTML, CSS, JavaScript
 Database: MySQL
 Server: Apache (XAMPP)
 
 ✨ 3. TÍNH NĂNG CHÍNH
+
 🎥 3.1. Người dùng (User)
+
 Đăng ký / Đăng nhập
 Xem phim (truy cập trang phim)
 Đánh giá phim
@@ -25,6 +31,7 @@ Thêm/xóa danh sách yêu thích
 Yêu cầu thêm phim
 
  🛠 3.2. Admin
+ 
 Đăng nhập admin 
 Quản lý phim (đăng, sửa, chặn phim) 
 Quản lý đánh giá (chặn đánh giá) 
@@ -32,6 +39,7 @@ Quản lý người dùng (xem, chặn người dùng)
 Quản lý thể loại (thêm thể loại) - Quản lý yêu cầu thêm phim
 
 🗄️4. CƠ SỞ DỮ LIỆU
+
 Các bảng chính:
 phim 
 the_loai
@@ -43,7 +51,8 @@ binh_luan
 nguoi_dung
 danh_gia
 
-📂5. Cấu trúc thư mục (gợi ý)
+📂5. Cấu trúc thư mục
+
 /cinemat
 │── index.php
 │── dangnhap.php
@@ -92,23 +101,32 @@ danh_gia
 │   └── ... (ảnh poster, banner, avatar,…)
 
 🧩 6. Mô tả chi tiết một số chức năng
+
 ⭐ 6.1. Đăng nhập
+
 Kiểm tra tên đăng nhập
 Kiểm tra mật khẩu
 Duy trì session người dùng
+
 ❤️ 6.2. Yêu thích phim
+
 Chỉ cho phép thao tác khi người dùng đã đăng nhập
 Lưu yêu thích vào bảng favorites
 Hiển thị danh sách phim yêu thích riêng
+
 🔍 6.3. Tìm kiếm & Lọc phim
+
 Tìm theo tên phim, mô tả
 Lọc theo thể loại/quốc gia
 Kết hợp nhiều tiêu chí
+
 📝 6.4. Đánh giá phim
 Chấm điểm 1–5 sao
 Like/Dislike đánh giá
 Hiển thị danh sách review
+
 ➕ 6.5. Admin thêm phim
+
 Upload poster
 Chọn nhiều thể loại
 Kiểm tra trùng yêu cầu thêm phim
@@ -135,6 +153,7 @@ Tích hợp xem phim trực tuyến
 🏁 9. Kết luận
 Dự án CINEMAT là một website đầy đủ chức năng giúp người dùng đánh giá và tương tác về phim, đồng thời cung cấp công cụ quản trị mạnh mẽ cho admin.
  Dự án giúp sinh viên làm quen với quy trình phát triển web thực tế từ phân tích – thiết kế – lập trình – triển khai – thử nghiệm.
+
 
 
 
