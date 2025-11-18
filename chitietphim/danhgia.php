@@ -5,8 +5,6 @@ require_once 'C:\xamppp\htdocs\CINEMAT\config\config.php';
 $is_logged_in = isset($_SESSION['user_id']);
 $current_user_id = $is_logged_in ? $_SESSION['user_id'] : null;
 
-
-
 // Lấy thông tin phim
 function getMovieInfo($conn, $id_phim) {
     $sql = "SELECT * FROM phim WHERE id_phim = ?";
@@ -18,7 +16,7 @@ function getMovieInfo($conn, $id_phim) {
 
 // Lấy danh sách đánh giá với bình luận
 function getDanhGiaWithComments($conn, $id_phim, $filter = 'all', $sort = 'newest') {
-    $where_condition = "WHERE dg.id_phim = ?";
+    $where_condition = "WHERE dg.id_phim = ? AND dg.parent_id IS NULL";
     $params = [$id_phim];
     $param_types = 'i';
     
@@ -34,9 +32,6 @@ function getDanhGiaWithComments($conn, $id_phim, $filter = 'all', $sort = 'newes
     switch($sort) {
         case 'oldest':
             $order_by = "ORDER BY dg.thoi_gian ASC";
-            break;
-        case 'most_liked':
-            $order_by = "ORDER BY dg.like DESC";
             break;
         case 'highest_rating':
             $order_by = "ORDER BY dg.diem DESC, dg.thoi_gian DESC";
@@ -68,9 +63,9 @@ function getDanhGiaWithComments($conn, $id_phim, $filter = 'all', $sort = 'newes
 // Truy vấn bình luận theo id_danh_gia và xây dựng cây
 function getCommentTree($conn, $id_danh_gia) {
     $sql = "SELECT bl.*, nd.ten_nguoi_dung 
-            FROM binh_luan bl 
+            FROM danh_gia bl 
             JOIN nguoi_dung nd ON bl.id_nguoi_dung = nd.id_nguoi_dung 
-            WHERE bl.id_danh_gia = ? AND bl.bi_chan = 0
+            WHERE bl.parent_id = ? AND bl.is_blocked = 0
             ORDER BY bl.thoi_gian ASC";
 
     $stmt = $conn->prepare($sql);
@@ -112,13 +107,13 @@ function renderCommentTree($commentTree, $parent_id = null, $level = 0, $is_logg
         // Menu dropdown chỉ hiển thị cho chủ sở hữu comment hoặc admin
         if ($is_logged_in && ($current_user_id == $comment['id_nguoi_dung'] || $_SESSION['role'] == 'admin')) {
             $html .= '<div class="relative">';
-            $html .= '<button class="text-[#b3b3b3] hover:text-white p-1 comment-menu-btn" data-comment-id="' . $comment['id_binh_luan'] . '">';
+            $html .= '<button class="text-[#b3b3b3] hover:text-white p-1 comment-menu-btn" data-comment-id="' . $comment['id_danh_gia'] . '">';
             $html .= '<i class="fas fa-ellipsis-v"></i>';
             $html .= '</button>';
-            $html .= '<div class="absolute right-0 mt-2 w-48 bg-[#252525] rounded shadow-lg z-10 dropdown-menu hidden" id="commentMenu' . $comment['id_binh_luan'] . '">';
+            $html .= '<div class="absolute right-0 mt-2 w-48 bg-[#252525] rounded shadow-lg z-10 dropdown-menu hidden" id="commentMenu' . $comment['id_danh_gia'] . '">';
             $html .= '<ul class="py-1">';
             if ($current_user_id == $comment['id_nguoi_dung'] || $_SESSION['role'] == 'admin') {
-                $html .= '<li class="dropdown-item px-4 py-2 cursor-pointer text-[#e50914] delete-comment" data-comment-id="' . $comment['id_binh_luan'] . '">Xóa</li>';
+                $html .= '<li class="dropdown-item px-4 py-2 cursor-pointer text-[#e50914] delete-comment" data-comment-id="' . $comment['id_danh_gia'] . '">Xóa</li>';
             }
             $html .= '</ul>';
             $html .= '</div>';
@@ -128,36 +123,28 @@ function renderCommentTree($commentTree, $parent_id = null, $level = 0, $is_logg
         $html .= '</div>';
         
         $html .= '<div class="mt-1 ' . $margin_class . '">';
-        $html .= '<p class="text-[#d2d2d2] text-sm">' . nl2br(htmlspecialchars($comment['noi_dung'])) . '</p>';
+        $html .= '<p class="text-[#d2d2d2] text-sm">' . nl2br(htmlspecialchars($comment['nhan_xet'])) . '</p>';
         
         $html .= '<div class="flex items-center gap-4 mt-2">';
-        $html .= '<button class="flex items-center gap-1 text-[#b3b3b3] hover:text-white text-sm comment-like-btn" data-comment-id="' . $comment['id_binh_luan'] . '" data-count="' . $comment['cmt_like'] . '">';
-        $html .= '<i class="far fa-thumbs-up"></i> <span class="like-count">' . $comment['cmt_like'] . '</span>';
-        $html .= '</button>';
-        $html .= '<button class="flex items-center gap-1 text-[#b3b3b3] hover:text-white text-sm comment-dislike-btn" data-comment-id="' . $comment['id_binh_luan'] . '" data-count="' . $comment['cmt_dislike'] . '">';
-        $html .= '<i class="far fa-thumbs-down"></i> <span class="dislike-count">' . $comment['cmt_dislike'] . '</span>';
-        $html .= '</button>';
         
-        if ($is_logged_in && $level < 3) { // Giới hạn 3 cấp độ reply
-            $html .= '<button class="text-[#b3b3b3] hover:text-white text-sm reply-comment-btn" data-comment-id="' . $comment['id_binh_luan'] . '" data-review-id="' . $comment['id_danh_gia'] . '">';
+        if ($is_logged_in && $level < 3) {
+            $html .= '<button class="text-[#b3b3b3] hover:text-white text-sm reply-comment-btn" data-comment-id="' . $comment['id_danh_gia'] . '" data-review-id="' . $comment['parent_id'] . '">';
             $html .= 'Trả lời';
             $html .= '</button>';
         }
         $html .= '</div>';
         
         // Form reply (ẩn mặc định)
-
         if ($is_logged_in && $level < 3) {
-            $html .= '<div class="mt-3 hidden comment-reply-form" id="commentReplyForm' . $comment['id_binh_luan'] . '">';
+            $html .= '<div class="mt-3 hidden comment-reply-form" id="commentReplyForm' . $comment['id_danh_gia'] . '">';
             $html .= '<div class="flex gap-3">';
             $html .= '<div class="w-7 h-7 user-avatar avatar-border">';
             $html .= '<i class="fas fa-user text-xs"></i>';
             $html .= '</div>';
-            // SỬA: data-parent-id và data-review-id thành camelCase cho JavaScript
-            $html .= '<form class="comment-form flex-1" data-review-id="' . $comment['id_danh_gia'] . '" data-parent-id="' . $comment['id_binh_luan'] . '">';
+            $html .= '<form class="comment-form flex-1" data-review-id="' . $comment['parent_id'] . '" data-parent-id="' . $comment['id_danh_gia'] . '">';
             $html .= '<textarea rows="2" class="comment-content netflix-textarea w-full text-sm" placeholder="Viết phản hồi của bạn..."></textarea>';
             $html .= '<div class="flex justify-end gap-2 mt-2">';
-            $html .= '<button type="button" class="text-[#b3b3b3] hover:text-white px-3 py-1 text-sm cancel-comment-reply" data-comment-id="' . $comment['id_binh_luan'] . '">Hủy</button>';
+            $html .= '<button type="button" class="text-[#b3b3b3] hover:text-white px-3 py-1 text-sm cancel-comment-reply" data-comment-id="' . $comment['id_danh_gia'] . '">Hủy</button>';
             $html .= '<button type="submit" class="netflix-btn netflix-btn-red px-3 py-1 rounded text-sm">Gửi</button>';
             $html .= '</div>';
             $html .= '</form>';
@@ -166,7 +153,7 @@ function renderCommentTree($commentTree, $parent_id = null, $level = 0, $is_logg
         }
         
         // Hiển thị replies đệ quy
-        $html .= renderCommentTree($commentTree, $comment['id_binh_luan'], $level + 1, $is_logged_in, $current_user_id);
+        $html .= renderCommentTree($commentTree, $comment['id_danh_gia'], $level + 1, $is_logged_in, $current_user_id);
         
         $html .= '</div>';
         $html .= '</div>';
@@ -199,9 +186,6 @@ $sort = isset($_GET['sort']) ? $_GET['sort'] : 'newest';
 
 // Lấy danh sách đánh giá
 $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
-
-
-
 
 ?>
 
@@ -434,82 +418,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
             margin-top: 2px;
         }
         
-        .review-badge {
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            background-color: rgba(255, 255, 255, 0.1);
-            color: var(--netflix-light-gray);
-        }
-        
-        .review-badge.verified {
-            background-color: rgba(0, 128, 0, 0.2);
-            color: #4ade80;
-        }
-        
-        .review-badge.top {
-            background-color: rgba(229, 9, 20, 0.2);
-            color: var(--netflix-red);
-        }
-        
-        .review-stats {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--netflix-light-gray);
-            font-size: 12px;
-        }
-        
-        .review-stats-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .review-date {
-            color: var(--netflix-light-gray);
-            font-size: 12px;
-        }
-        
-        .review-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 12px;
-        }
-        
-        .review-sort {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--netflix-light-gray);
-        }
-        
-        .review-sort-label {
-            font-size: 14px;
-        }
-        
-        .review-sort-select {
-            background-color: #333;
-            border: none;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        
-        .review-sort-select:focus {
-            outline: none;
-        }
-        
-        .review-filter {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 16px;
-            border-bottom: 1px solid #333;
-            padding-bottom: 8px;
-        }
-        
         .empty-state {
             display: flex;
             flex-direction: column;
@@ -547,14 +455,7 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                 </h2>
             </div>
             
-            <div class="review-filter">
-                <div class="filter-option <?php echo $filter == 'all' ? 'active' : ''; ?>" data-filter="all">Tất cả</div>
-                <div class="filter-option <?php echo $filter == '5' ? 'active' : ''; ?>" data-filter="5">5 sao</div>
-                <div class="filter-option <?php echo $filter == '4' ? 'active' : ''; ?>" data-filter="4">4 sao</div>
-                <div class="filter-option <?php echo $filter == '3' ? 'active' : ''; ?>" data-filter="3">3 sao</div>
-                <div class="filter-option <?php echo $filter == '2' ? 'active' : ''; ?>" data-filter="2">2 sao</div>
-                <div class="filter-option <?php echo $filter == '1' ? 'active' : ''; ?>" data-filter="1">1 sao</div>
-            </div>
+            
             
             <!-- Danh sách đánh giá -->
             <div class="space-y-6" id="reviewsList">
@@ -618,19 +519,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                             <?php endif; ?>
                             
                             <div class="flex items-center gap-4 mt-4">
-                                <button class="flex items-center gap-1 text-[#b3b3b3] hover:text-white review-like-btn" 
-                                        data-review-id="<?php echo $danhgia['id_danh_gia']; ?>" 
-                                        data-count="<?php echo $danhgia['like']; ?>">
-                                    <i class="far fa-thumbs-up"></i> 
-                                    <span class="like-count"><?php echo $danhgia['like']; ?></span>
-                                </button>
-                                <button class="flex items-center gap-1 text-[#b3b3b3] hover:text-white review-dislike-btn" 
-                                        data-review-id="<?php echo $danhgia['id_danh_gia']; ?>" 
-                                        data-count="<?php echo $danhgia['dislike']; ?>">
-                                    <i class="far fa-thumbs-down"></i> 
-                                    <span class="dislike-count"><?php echo $danhgia['dislike']; ?></span>
-                                </button>
-                                
                                 <?php if ($is_logged_in): ?>
                                 <button class="text-[#b3b3b3] hover:text-white reply-btn" data-review-id="<?php echo $danhgia['id_danh_gia']; ?>">
                                     Trả lời
@@ -645,19 +533,15 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                                     <div class="w-8 h-8 user-avatar avatar-border">
                                         <i class="fas fa-user text-xs"></i>
                                     </div>
-                                    <form id="comment-form" class="flex-1">
+                                    <form class="comment-form flex-1" data-review-id="<?php echo $danhgia['id_danh_gia']; ?>">
                                         <textarea 
-                                            id="comment-content"
                                             rows="3" 
-                                            class="netflix-textarea w-full text-sm"
+                                            class="comment-content netflix-textarea w-full text-sm"
                                             placeholder="Viết bình luận của bạn..."
-                                            data-review-id="<?php echo $danhgia['id_danh_gia']; ?>"
                                         ></textarea>
-                                        <input type="hidden" id="review-id" value="<?php echo $comment['id_danh_gia']; ?>">
-                                        <input type="hidden" id="parent-id" value="<?php echo $comment['parent-id']; ?>"> <!-- Nếu là bình luận gốc thì để trống -->
                                         <div class="flex justify-end gap-2 mt-2">
-                                            <button class="text-[#b3b3b3] hover:text-white px-3 py-1 text-sm cancel-reply" data-review-id="<?php echo $danhgia['id_danh_gia']; ?>">Hủy</button>
-                                            <button type='submit' class="netflix-btn netflix-btn-red px-3 py-1 rounded text-sm submit-comment" data-review-id="<?php echo $danhgia['id_danh_gia']; ?>">Gửi</button>
+                                            <button type="button" class="text-[#b3b3b3] hover:text-white px-3 py-1 text-sm cancel-reply" data-review-id="<?php echo $danhgia['id_danh_gia']; ?>">Hủy</button>
+                                            <button type="submit" class="netflix-btn netflix-btn-red px-3 py-1 rounded text-sm">Gửi</button>
                                         </div>
                                     </form>
                                 </div>
@@ -665,9 +549,9 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                             <?php endif; ?>
                             
                             <!-- Bình luận -->
-                            <?php if (isset($danhgia['binh_luan'][null]) && !empty($danhgia['binh_luan'][null])): ?>
+                            <?php if (isset($danhgia['binh_luan'][$danhgia['id_danh_gia']]) && !empty($danhgia['binh_luan'][$danhgia['id_danh_gia']])): ?>
                             <div class="reply-container mt-4 fade-in" style="animation-delay: <?php echo ($index * 0.1 + 0.3); ?>s;">
-                                <?php echo renderCommentTree($danhgia['binh_luan'], null, 0, $is_logged_in, $current_user_id); ?>
+                                <?php echo renderCommentTree($danhgia['binh_luan'], $danhgia['id_danh_gia'], 0, $is_logged_in, $current_user_id); ?>
                             </div>
                             <?php endif; ?>
                         </div>
@@ -678,11 +562,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
     </div>
 
     <script>
-    console.log('Movie ID:', movieId); // Debug
-    </script>
-
-
-    <script>
         // DOM loaded events
         document.addEventListener('DOMContentLoaded', function() {
             initializeAnimations();
@@ -691,9 +570,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
             initializeCommentInteractions();
             initializeFilters();
         });
-
-
-
 
         // Initialize animations
         function initializeAnimations() {
@@ -714,14 +590,13 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
 
         // Initialize dropdown menus
         function initializeDropdowns() {
-            // Review menu dropdowns (code cũ giữ nguyên)
+            // Review menu dropdowns
             document.querySelectorAll('.review-menu-btn').forEach(button => {
                 button.addEventListener('click', function(e) {
                     e.stopPropagation();
                     const reviewId = this.getAttribute('data-review-id');
                     const menu = document.getElementById(`reviewMenu${reviewId}`);
                     
-                    // Close all other menus
                     document.querySelectorAll('.dropdown-menu').forEach(m => {
                         if (m.id !== `reviewMenu${reviewId}`) m.classList.remove('show');
                     });
@@ -730,14 +605,13 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                 });
             });
 
-            // Comment menu dropdowns (code cũ giữ nguyên)
+            // Comment menu dropdowns
             document.querySelectorAll('.comment-menu-btn').forEach(button => {
                 button.addEventListener('click', function(e) {
                     e.stopPropagation();
                     const commentId = this.getAttribute('data-comment-id');
                     const menu = document.getElementById(`commentMenu${commentId}`);
                     
-                    // Close all other menus
                     document.querySelectorAll('.dropdown-menu').forEach(m => {
                         if (m.id !== `commentMenu${commentId}`) m.classList.remove('show');
                     });
@@ -746,7 +620,7 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                 });
             });
 
-            // THÊM MỚI: Xử lý xóa đánh giá
+            // Xử lý xóa đánh giá
             document.querySelectorAll('.delete-review').forEach(button => {
                 button.addEventListener('click', function() {
                     const reviewId = this.getAttribute('data-review-id');
@@ -756,7 +630,7 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                 });
             });
 
-            // THÊM MỚI: Xử lý xóa bình luận
+            // Xử lý xóa bình luận
             document.querySelectorAll('.delete-comment').forEach(button => {
                 button.addEventListener('click', function() {
                     const commentId = this.getAttribute('data-comment-id');
@@ -766,7 +640,7 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                 });
             });
 
-            // Close dropdowns when clicking outside (code cũ giữ nguyên)
+            // Close dropdowns when clicking outside
             document.addEventListener('click', function() {
                 document.querySelectorAll('.dropdown-menu').forEach(menu => {
                     menu.classList.remove('show');
@@ -789,19 +663,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                     } else {
                         this.textContent = 'Xem thêm';
                     }
-                });
-            });
-
-            // Review like/dislike
-            document.querySelectorAll('.review-like-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    handleReviewLike(this, 'like');
-                });
-            });
-
-            document.querySelectorAll('.review-dislike-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    handleReviewLike(this, 'dislike');
                 });
             });
 
@@ -837,23 +698,29 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
             });
 
             // Submit comment
-            document.querySelectorAll('.submit-comment').forEach(button => {
-                button.addEventListener('click', function() {
+            document.querySelectorAll('.comment-form').forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
                     const reviewId = this.getAttribute('data-review-id');
-                    const textarea = document.querySelector(`textarea[data-review-id="${reviewId}"]`);
+                    const parentId = this.getAttribute('data-parent-id') || null;
+                    const textarea = this.querySelector('.comment-content');
                     const content = textarea.value.trim();
                     
                     if (content) {
-                        submitComment(reviewId, content, null);
+                        submitComment(reviewId, content, parentId);
                         textarea.value = '';
-                        const replyForm = document.getElementById(`replyForm${reviewId}`);
-                        animateHide(replyForm);
+                        const replyForm = parentId ? 
+                            document.getElementById(`commentReplyForm${parentId}`) : 
+                            document.getElementById(`replyForm${reviewId}`);
+                        if (replyForm) {
+                            animateHide(replyForm);
+                        }
                     }
                 });
             });
         }
 
-        // SỬA LẠI HÀM submitComment - thay thế hàm cũ
+        // Submit comment function
         function submitComment(reviewId, content, parentId = null) {
             const formData = new FormData();
             formData.append('action', 'add_comment');
@@ -871,7 +738,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
             .then(data => {
                 if (data.success) {
                     showNotification('Thêm bình luận thành công!', 'success');
-                    // Reload trang để hiển thị bình luận mới
                     setTimeout(() => {
                         window.location.reload();
                     }, 1000);
@@ -887,19 +753,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
 
         // Initialize comment interactions
         function initializeCommentInteractions() {
-            // Comment like/dislike
-            document.querySelectorAll('.comment-like-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    handleCommentLike(this, 'like');
-                });
-            });
-
-            document.querySelectorAll('.comment-dislike-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    handleCommentLike(this, 'dislike');
-                });
-            });
-
             // Reply to comment
             document.querySelectorAll('.reply-comment-btn').forEach(button => {
                 button.addEventListener('click', function() {
@@ -930,24 +783,6 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                     animateHide(replyForm);
                 });
             });
-
-            // Submit comment reply
-            document.querySelectorAll('.submit-comment-reply').forEach(button => {
-                button.addEventListener('click', function() {
-                    const commentId = this.getAttribute('data-comment-id');
-                    const textarea = document.querySelector(`#commentReplyForm${commentId} textarea`);
-                    const content = textarea.value.trim();
-                    const reviewId = textarea.getAttribute('data-review-id');
-                    const parentId = textarea.getAttribute('data-parent-id');
-                    
-                    if (content) {
-                        submitComment(reviewId, content, parentId);
-                        textarea.value = '';
-                        const replyForm = document.getElementById(`commentReplyForm${commentId}`);
-                        animateHide(replyForm);
-                    }
-                });
-            });
         }
 
         // Initialize filters
@@ -959,21 +794,13 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
                     updateFilter(filter);
                 });
             });
-
-            // Sort select
-            document.getElementById('sortSelect').addEventListener('change', function() {
-                const sort = this.value;
-                updateSort(sort);
-            });
         }
 
-        // SỬA LẠI HÀM updateReviewReaction - thay thế hàm cũ
-        function updateReviewReaction(reviewId, type, isActive) {
+        // Delete review
+        function deleteReview(reviewId) {
             const formData = new FormData();
-            formData.append('action', 'update_review_reaction');
+            formData.append('action', 'delete_review');
             formData.append('review_id', reviewId);
-            formData.append('type', type);
-            formData.append('is_active', isActive);
 
             fetch('ajax_handlers.php', {
                 method: 'POST',
@@ -982,239 +809,96 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Cập nhật số lượng hiển thị
-                    const button = document.querySelector(`[data-review-id="${reviewId}"].review-${type}-btn`);
-                    if (button) {
-                        button.setAttribute('data-count', data.count);
-                        button.querySelector(`.${type}-count`).textContent = data.count;
-                    }
+                    showNotification('Xóa đánh giá thành công!', 'success');
+                    const reviewElement = document.querySelector(`[data-review-id="${reviewId}"]`).closest('.review-item');
+                    reviewElement.style.transition = 'opacity 0.5s, transform 0.5s';
+                    reviewElement.style.opacity = '0';
+                    reviewElement.style.transform = 'translateY(-20px)';
+                    
+                    setTimeout(() => {
+                        reviewElement.remove();
+                    }, 500);
                 } else {
-                    showNotification(data.message || 'Có lỗi xảy ra!', 'error');
+                    showNotification(data.message || 'Có lỗi xảy ra khi xóa đánh giá!', 'error');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                showNotification('Có lỗi xảy ra!', 'error');
+                showNotification('Có lỗi xảy ra khi xóa đánh giá!', 'error');
             });
         }
 
+        // Delete comment
+        function deleteComment(commentId) {
+            const formData = new FormData();
+            formData.append('action', 'delete_comment');
+            formData.append('comment_id', commentId);
 
-        
-    // SỬA LẠI HÀM updateCommentReaction - thay thế hàm cũ  
-    function updateCommentReaction(commentId, type, isActive) {
-        const formData = new FormData();
-        formData.append('action', 'update_comment_reaction');
-        formData.append('comment_id', commentId);
-        formData.append('type', type);
-        formData.append('is_active', isActive);
-
-        fetch('ajax_handlers.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Cập nhật số lượng hiển thị
-                const button = document.querySelector(`[data-comment-id="${commentId}"].comment-${type}-btn`);
-                if (button) {
-                    button.setAttribute('data-count', data.count);
-                    button.querySelector(`.${type}-count`).textContent = data.count;
+            fetch('ajax_handlers.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Xóa bình luận thành công!', 'success');
+                    const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`).closest('.mt-3, .mt-4');
+                    if (commentElement) {
+                        commentElement.style.transition = 'opacity 0.5s, transform 0.5s';
+                        commentElement.style.opacity = '0';
+                        commentElement.style.transform = 'translateX(-20px)';
+                        
+                        setTimeout(() => {
+                            commentElement.remove();
+                        }, 500);
+                    }
+                } else {
+                    showNotification(data.message || 'Có lỗi xảy ra khi xóa bình luận!', 'error');
                 }
-            } else {
-                showNotification(data.message || 'Có lỗi xảy ra!', 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showNotification('Có lỗi xảy ra!', 'error');
-        });
-    }
-
-    // THÊM MỚI: Xóa đánh giá
-    function deleteReview(reviewId) {
-        const formData = new FormData();
-        formData.append('action', 'delete_review');
-        formData.append('review_id', reviewId);
-
-        fetch('ajax_handlers.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('Xóa đánh giá thành công!', 'success');
-                // Xóa element khỏi DOM với animation
-                const reviewElement = document.querySelector(`[data-review-id="${reviewId}"]`).closest('.review-item');
-                reviewElement.style.transition = 'opacity 0.5s, transform 0.5s';
-                reviewElement.style.opacity = '0';
-                reviewElement.style.transform = 'translateY(-20px)';
-                
-                setTimeout(() => {
-                    reviewElement.remove();
-                    // Cập nhật số lượng đánh giá hiển thị
-                    updateReviewCount();
-                }, 500);
-            } else {
-                showNotification(data.message || 'Có lỗi xảy ra khi xóa đánh giá!', 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showNotification('Có lỗi xảy ra khi xóa đánh giá!', 'error');
-        });
-    }
-
-    // THÊM MỚI: Xóa bình luận
-    function deleteComment(commentId) {
-        const formData = new FormData();
-        formData.append('action', 'delete_comment');
-        formData.append('comment_id', commentId);
-
-        fetch('ajax_handlers.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('Xóa bình luận thành công!', 'success');
-                // Xóa element khỏi DOM với animation
-                const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`).closest('.mt-3, .mt-4');
-                if (commentElement) {
-                    commentElement.style.transition = 'opacity 0.5s, transform 0.5s';
-                    commentElement.style.opacity = '0';
-                    commentElement.style.transform = 'translateX(-20px)';
-                    
-                    setTimeout(() => {
-                        commentElement.remove();
-                    }, 500);
-                }
-            } else {
-                showNotification(data.message || 'Có lỗi xảy ra khi xóa bình luận!', 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showNotification('Có lỗi xảy ra khi xóa bình luận!', 'error');
-        });
-    }
-
-    // THÊM MỚI: Hiển thị thông báo
-    function showNotification(message, type = 'info') {
-        // Tạo element thông báo
-        const notification = document.createElement('div');
-        notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transition-all duration-500 transform translate-x-full`;
-        
-        // Thêm class theo loại thông báo
-        switch(type) {
-            case 'success':
-                notification.classList.add('bg-green-600', 'text-white');
-                break;
-            case 'error':
-                notification.classList.add('bg-red-600', 'text-white');
-                break;
-            default:
-                notification.classList.add('bg-blue-600', 'text-white');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Có lỗi xảy ra khi xóa bình luận!', 'error');
+            });
         }
-        
-        notification.innerHTML = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-                <span>${message}</span>
-            </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Animation hiển thị
-        setTimeout(() => {
-            notification.classList.remove('translate-x-full');
-        }, 100);
-        
-        // Tự động ẩn sau 3 giây
-        setTimeout(() => {
-            notification.classList.add('translate-x-full');
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transition-all duration-500 transform translate-x-full`;
+            
+            switch(type) {
+                case 'success':
+                    notification.classList.add('bg-green-600', 'text-white');
+                    break;
+                case 'error':
+                    notification.classList.add('bg-red-600', 'text-white');
+                    break;
+                default:
+                    notification.classList.add('bg-blue-600', 'text-white');
+            }
+            
+            notification.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
             setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 500);
-        }, 3000);
-    }
-
-
-        // Handle review like/dislike
-        function handleReviewLike(button, type) {
-            const reviewId = button.getAttribute('data-review-id');
-            const countElement = button.querySelector(type === 'like' ? '.like-count' : '.dislike-count');
-            let count = parseInt(button.getAttribute('data-count'));
+                notification.classList.remove('translate-x-full');
+            }, 100);
             
-            if (button.classList.contains('active')) {
-                // Remove like/dislike
-                count--;
-                button.classList.remove('active');
-                button.querySelector('i').className = `far fa-thumbs-${type === 'like' ? 'up' : 'down'}`;
-            } else {
-                // Add like/dislike
-                count++;
-                button.classList.add('active');
-                button.querySelector('i').className = `fas fa-thumbs-${type === 'like' ? 'up' : 'down'} like-animation`;
-                
-                // Remove opposite reaction if active
-                const oppositeType = type === 'like' ? 'dislike' : 'like';
-                const oppositeBtn = button.parentElement.querySelector(`.review-${oppositeType}-btn`);
-                if (oppositeBtn && oppositeBtn.classList.contains('active')) {
-                    let oppositeCount = parseInt(oppositeBtn.getAttribute('data-count'));
-                    oppositeCount--;
-                    oppositeBtn.setAttribute('data-count', oppositeCount);
-                    oppositeBtn.querySelector(`.${oppositeType}-count`).textContent = oppositeCount;
-                    oppositeBtn.classList.remove('active');
-                    oppositeBtn.querySelector('i').className = `far fa-thumbs-${oppositeType === 'like' ? 'up' : 'down'}`;
-                }
-            }
-            
-            button.setAttribute('data-count', count);
-            countElement.textContent = count;
-            
-            // Send AJAX request to update database
-            updateReviewReaction(reviewId, type, button.classList.contains('active'));
-        }
-
-        // Handle comment like/dislike
-        function handleCommentLike(button, type) {
-            const commentId = button.getAttribute('data-comment-id');
-            const countElement = button.querySelector(type === 'like' ? '.like-count' : '.dislike-count');
-            let count = parseInt(button.getAttribute('data-count'));
-            
-            if (button.classList.contains('active')) {
-                count--;
-                button.classList.remove('active');
-                button.querySelector('i').className = `far fa-thumbs-${type === 'like' ? 'up' : 'down'}`;
-            } else {
-                count++;
-                button.classList.add('active');
-                button.querySelector('i').className = `fas fa-thumbs-${type === 'like' ? 'up' : 'down'} like-animation`;
-                
-                // Remove opposite reaction if active
-                const oppositeType = type === 'like' ? 'dislike' : 'like';
-                const oppositeBtn = button.parentElement.querySelector(`.comment-${oppositeType}-btn`);
-                if (oppositeBtn && oppositeBtn.classList.contains('active')) {
-                    let oppositeCount = parseInt(oppositeBtn.getAttribute('data-count'));
-                    oppositeCount--;
-                    oppositeBtn.setAttribute('data-count', oppositeCount);
-                    oppositeBtn.querySelector(`.${oppositeType}-count`).textContent = oppositeCount;
-                    oppositeBtn.classList.remove('active');
-                    oppositeBtn.querySelector('i').className = `far fa-thumbs-${oppositeType === 'like' ? 'up' : 'down'}`;
-                }
-            }
-            
-            button.setAttribute('data-count', count);
-            countElement.textContent = count;
-            
-            // Send AJAX request to update database
-            updateCommentReaction(commentId, type, button.classList.contains('active'));
+            setTimeout(() => {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 500);
+            }, 3000);
         }
 
         // Animation helpers
@@ -1239,4 +923,4 @@ $danhgias = getDanhGiaWithComments($conn, $movie_id, $filter, $sort);
             url.searchParams.set('filter', filter);
             window.location.href = url.toString();
         }
-</script>
+    </script>
